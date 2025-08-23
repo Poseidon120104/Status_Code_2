@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import re 
+from db_utils import save_prescription_to_db, get_prescriptions
 
 # Optional Gemini
 load_dotenv()
@@ -131,12 +132,22 @@ def extract_with_gemini(image_path):
     return to_target_schema(items)
 
 # ---------- API ----------
+
+UPLOAD_DIR = "uploads"
+DATA_DIR = "data"
+
+
 @app.route("/api/prescriptions", methods=["POST"])
 def upload_and_extract():
+    print(request.files)
     if "file" not in request.files:
         return jsonify({"error": "No file part 'file' found"}), 400
-
+    print(request.form)
     f = request.files["file"]
+    email = request.form.get("string") 
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
     if f.filename == "":
         return jsonify({"error": "Empty filename"}), 400
 
@@ -153,14 +164,30 @@ def upload_and_extract():
         else:
             return jsonify({"error": "Gemini API not configured"}), 500
 
+        # Save prescription JSON locally
         out_filename = f"medicines_{uuid.uuid4().hex}.json"
         out_path = os.path.join(DATA_DIR, out_filename)
         with open(out_path, "w", encoding="utf-8") as fp:
             json.dump(data, fp, ensure_ascii=False, indent=2)
 
+        # Save prescription + image in MongoDB
+        with open(save_path, "rb") as img_fp:
+            image_bytes = img_fp.read()
+
+        from db_utils import save_prescription  # make sure this imports your function
+        save_prescription(
+            email=email,
+            data=data,
+            filename=out_filename,
+            image_bytes=image_bytes,
+            image_name=f.filename
+        )
+
         return jsonify({"ok": True, "data": data, "file": out_filename})
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.route("/api/medicines/<filename>", methods=["GET"])
 def get_medicines(filename):
@@ -176,5 +203,110 @@ def get_latest_medicines():
         data = json.load(fp)
     return jsonify({"file": latest, "data": data})
 
+@app.route("/api/prescriptions/save", methods=["POST"])
+def save_prescription_api():
+    try:
+        data = request.get_json()
+
+        email = data.get("email")
+        name = data.get("name")
+        file = data.get("file")
+        medicines_data = data.get("data")
+
+        if not email or not name or not file or not medicines_data:
+            return jsonify({"error": "Missing required fields"}), 400
+        print("working")
+        inserted_id = save_prescription_to_db(email=email, name=name, data=medicines_data, filename=file)
+        print("working2")
+        return jsonify({"message": "Prescription saved successfully", "id": inserted_id}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+# Get prescriptions by email
+@app.route("/api/prescriptions/<email>", methods=["GET"])
+def get_prescriptions_api(email):
+    try:
+        prescriptions = get_prescriptions(email)
+        if not prescriptions:
+            return jsonify({"message": "No prescriptions found"}), 404
+        return jsonify({"prescriptions": prescriptions}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Retrieve Images
+from flask import send_file, jsonify, request
+import io  # standard Python module
+
+from db_utils import get_prescriptions  # use your helper from db_utils
+@app.route("/api/prescriptions/images", methods=["POST"])
+def get_prescription_images():
+    try:
+        data = request.get_json()
+        if not data or "email" not in data:
+            return jsonify({"error": "Email is required in request body"}), 400
+
+        email = data["email"].strip().lower()
+        prescriptions_list = get_prescriptions_with_images(email)
+
+        if not prescriptions_list:
+            return jsonify({"error": "No prescriptions found for this email"}), 404
+
+        import base64
+        images_data = []
+        for pres in prescriptions_list:
+            if "image_bytes" in pres and "image_name" in pres:
+                img_b64 = base64.b64encode(pres["image_bytes"]).decode("utf-8")
+                images_data.append({
+                    "file": pres["file"],
+                    "image_name": pres["image_name"],
+                    "image_base64": img_b64,
+                    "date": pres.get("date")
+                })
+
+        return jsonify({"email": email, "prescriptions": images_data})  
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# calender
+
+from flask import Flask, request, jsonify   
+from calendar_utils import authenticate_google, add_medicine_events
+
+
+@app.route("/add_medicines", methods=["POST"])
+def add_medicines():
+    """
+    API endpoint to add medicines to Google Calendar.
+    Expected JSON format:
+    {
+        "email": "user@example.com",
+        "medicines": [...]
+    }
+    """
+    data = request.get_json()
+    if not data or "email" not in data or "medicines" not in data:
+        return jsonify({"error": "Invalid request format"}), 400
+    print(data)
+    email = data["email"]
+    medicines = data["medicines"]
+
+
+    try:
+        service = authenticate_google(email)
+        print("before func")
+        events = add_medicine_events(service, medicines, email)
+        print("after func")
+        return jsonify({"message": "Events created successfully", "events": events}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5001, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)
