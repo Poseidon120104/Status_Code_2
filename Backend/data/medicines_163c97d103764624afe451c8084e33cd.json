@@ -1,0 +1,15 @@
+{
+  "medicines": [
+    {
+      "name": "Amoxicillin 500mg",
+      "time": [
+        "08:00",
+        "16:00",
+        "20:00"
+      ],
+      "start_date": "2024-07-26",
+      "end_date": "2024-08-01",
+      "notes": "1 cap 3x a day for seven days"
+    }
+  ]
+}
