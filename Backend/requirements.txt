@@ -1,7 +1,0 @@
-flask
-flask-cors
-pillow
-pytesseract
-
-# Optional for Gemini path (set GEMINI_API_KEY to use)
-google-generativeai
