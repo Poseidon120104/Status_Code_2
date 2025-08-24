@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useRef } from "react"
-import axios from 'axios'
+import axios from "axios"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,48 +35,60 @@ export default function SignInPage() {
         variant: "destructive",
       })
     } else if (isSignUpMode) {
+      localStorage.setItem("userEmail", email)
       toast({
         title: "Account created successfully!",
         description: "Welcome to MedExtract.",
       })
+    } else {
+      localStorage.setItem("userEmail", email)
     }
     setIsSigningIn(false)
   }
 
   const handleImageExtraction = async (file: File) => {
     setIsExtracting(true)
+    const startTime = performance.now();
     try {
       const formData = new FormData()
       formData.append("file", file)
-      const response = await axios.post("http://10.50.63.43:5001/api/prescriptions", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-        timeout: 30000,
+      formData.append("string", localStorage.getItem("userEmail") ?? "")
+
+      for (const pair of formData.entries()) {
+        console.log(pair[0] + ", " + pair)
+      }
+
+      const response = await axios.post("http://10.50.49.41:5001/api/prescriptions", formData, {
+        headers: {},
       })
+      const endTime = performance.now() // End timer
+      const durationMs = endTime - startTime
+      console.log(`Extraction time: ${durationMs.toFixed(2)} ms`)
+      localStorage.setItem("lastExtractionTimeMs", durationMs.toString())
       setExtractedData(response.data)
       toast({
         title: "Extraction Successful!",
         description: "Redirecting to manual entry with extracted data...",
       })
-      // Save extracted medicines to localStorage
-      const medsArray = response.data?.data?.medicines || [];
+      const medsArray = response.data?.data?.medicines || []
       localStorage.setItem("extractedMedicines", JSON.stringify(medsArray))
-      setTimeout(() => router.push("/manual"), 100);
+      setTimeout(() => router.push("/manual"), 100)
     } catch (error: any) {
       toast({
         title: "Extraction Failed",
-        description: error.response?.data?.message || "Failed to process the image. Please try again.",
+        description:
+          error.response?.data?.message || "Failed to process the image. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsExtracting(false)
     }
   }
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       toast({
         title: "Invalid File Type",
         description: "Please select an image file (JPG, PNG, etc.)",
@@ -97,6 +109,10 @@ export default function SignInPage() {
 
   const handleExtractionClick = () => {
     fileInputRef.current?.click()
+  }
+
+  const handleSignOut = () => {
+    signOut()
   }
 
   if (isLoading) {
@@ -140,7 +156,6 @@ export default function SignInPage() {
                     <p className="text-sm text-muted-foreground">
                       Upload prescription images and automatically extract medicine details
                     </p>
-                    {/* Hidden file input */}
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -167,6 +182,7 @@ export default function SignInPage() {
                     </Button>
                   </CardContent>
                 </Card>
+
                 {/* Manual entry */}
                 <Card className="border-border hover:border-primary/50 transition-colors cursor-pointer">
                   <CardContent className="p-6 text-center space-y-3">
@@ -174,7 +190,9 @@ export default function SignInPage() {
                       <Mail className="h-6 w-6 text-blue-600" />
                     </div>
                     <h3 className="font-semibold text-card-foreground">Manual Entry</h3>
-                    <p className="text-sm text-muted-foreground">Manually add and manage prescription medicines</p>
+                    <p className="text-sm text-muted-foreground">
+                      Manually add and manage prescription medicines
+                    </p>
                     <Button
                       variant="outline"
                       className="w-full bg-transparent"
@@ -185,6 +203,7 @@ export default function SignInPage() {
                   </CardContent>
                 </Card>
               </div>
+
               {/* Display extracted data */}
               {extractedData && (
                 <Card className="border-border bg-green-50 dark:bg-green-950">
@@ -201,7 +220,11 @@ export default function SignInPage() {
                       <div className="flex gap-2 mt-4">
                         <Button
                           size="sm"
-                          onClick={() => navigator.clipboard.writeText(JSON.stringify(extractedData, null, 2))}
+                          onClick={() =>
+                            navigator.clipboard.writeText(
+                              JSON.stringify(extractedData, null, 2)
+                            )
+                          }
                         >
                           Copy JSON
                         </Button>
@@ -217,8 +240,13 @@ export default function SignInPage() {
                   </CardContent>
                 </Card>
               )}
+
               <div className="pt-4 border-t">
-                <Button variant="ghost" className="w-full text-muted-foreground" onClick={signOut}>
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  onClick={handleSignOut}
+                >
                   Sign Out
                 </Button>
               </div>
@@ -239,13 +267,18 @@ export default function SignInPage() {
             </div>
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold text-card-foreground">MedExtract</CardTitle>
+            <CardTitle className="text-2xl font-bold text-card-foreground">
+              MedExtract
+            </CardTitle>
             <p className="text-muted-foreground mt-2">
-              {isSignUpMode ? "Create your account to get started" : "Sign in to manage your prescriptions"}
+              {isSignUpMode
+                ? "Create your account to get started"
+                : "Sign in to manage your prescriptions"}
             </p>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
+          {/* Email/Password Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-card-foreground">
@@ -287,15 +320,19 @@ export default function SignInPage() {
                   ? "Creating account..."
                   : "Signing in..."
                 : isSignUpMode
-                  ? "Sign Up"
-                  : "Sign In"}
+                ? "Sign Up"
+                : "Sign In"}
             </Button>
           </form>
-          <div className="mt-4 text-center">
+          <div className="text-center">
             <p className="text-sm text-muted-foreground">
               {isSignUpMode ? "Already have an account?" : "Don't have an account?"}
             </p>
-            <Button variant="link" className="p-0 h-auto text-primary" onClick={() => setIsSignUpMode(!isSignUpMode)}>
+            <Button
+              variant="link"
+              className="p-0 h-auto text-primary"
+              onClick={() => setIsSignUpMode(!isSignUpMode)}
+            >
               {isSignUpMode ? "Sign in here" : "Sign up here"}
             </Button>
           </div>

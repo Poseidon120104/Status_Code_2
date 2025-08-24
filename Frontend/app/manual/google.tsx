@@ -43,7 +43,7 @@ function loadGoogleScript(): Promise<void> {
 }
 
 
-async function authorizeAndAddEvents() {
+async function authorizeAndAddEvents(medicines: Medicine[]) {
     const clientId=process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     // 793575144045-h762hck4jqjdsdt21es7d981ula16d39.apps.googleusercontent.com
   await loadGoogleScript();

@@ -100,6 +100,14 @@ Rules:
 """
 
 def extract_with_gemini(image_path):
+
+    import os
+
+    image_size_kb = os.path.getsize(image_path) / 1024
+    image_tokens_estimate = int(image_size_kb)  # 1 KB ≈ 1 token
+    def estimate_tokens(text: str) -> int:
+        return max(1, len(text) // 4)
+
     model = genai.GenerativeModel("gemini-1.5-flash")
     with open(image_path, "rb") as f:
         img_bytes = f.read()
@@ -117,6 +125,21 @@ def extract_with_gemini(image_path):
         }
     )
 
+
+    try:
+        def estimate_tokens(text: str) -> int:
+            return max(1, len(text) // 4)
+
+        prompt_tokens = estimate_tokens(GEMINI_SYSTEM_PROMPT)
+        print("Approx input tokens:", prompt_tokens+ image_tokens_estimate)
+
+
+    except Exception as e:
+        prompt_tokens = "Error calculating tokens: " + str(e)
+
+    print("Input tokens:", prompt_tokens)
+    output_tokens = estimate_tokens(resp.text)
+    print("Approx total output tokens:", output_tokens)
     import re
     txt = resp.text.strip()
     m = re.search(r'\{[\s\S]*\}', txt)
@@ -276,12 +299,13 @@ def get_prescription_images():
 
 from flask import Flask, request, jsonify   
 from calendar_utils import authenticate_google, add_medicine_events
+from db_utils import save_medicines
 
 
 @app.route("/add_medicines", methods=["POST"])
 def add_medicines():
     """
-    API endpoint to add medicines to Google Calendar.
+    API endpoint to save medicines to MongoDB.
     Expected JSON format:
     {
         "email": "user@example.com",
@@ -291,17 +315,13 @@ def add_medicines():
     data = request.get_json()
     if not data or "email" not in data or "medicines" not in data:
         return jsonify({"error": "Invalid request format"}), 400
-    print(data)
-    email = data["email"]
+
+    email = data["email"].strip()
     medicines = data["medicines"]
-
-
+    print(data)
     try:
-        service = authenticate_google(email)
-        print("before func")
-        events = add_medicine_events(service, medicines, email)
-        print("after func")
-        return jsonify({"message": "Events created successfully", "events": events}), 201
+        save_medicines(email, medicines)
+        return jsonify({"message": "Medicines saved successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

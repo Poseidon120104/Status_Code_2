@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, Plus, X, ArrowLeft, Save } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { AuthGuard } from "@/components/auth-guard"
+import { authorizeAndAddEvents } from "./google"
+// import GoogleSignIn from "./GoogleSignIn"
 
 interface Medicine {
   id: string
@@ -17,6 +19,21 @@ interface Medicine {
   end_date: string
   notes: string
 }
+
+// const handleGoogleSignIn = (data: { email: string; token: string }) => {
+//     setGoogleToken(data.token);
+//     setIsGoogleSignedIn(true);
+    
+//     // Store in localStorage for persistence
+//     localStorage.setItem("userEmail", data.email);
+//     localStorage.setItem("googleToken", data.token);
+    
+//     toast({
+//       title: "Google Sign In Successful!",
+//       description: `Welcome, ${data.email}`,
+//     });
+//   };
+
 
 function makeId() {
   return `med-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
@@ -97,50 +114,59 @@ export default function ManualPrescriptionPage() {
     }
   }
 
-  const saveChanges = async () => {
-    // Simple filter out entirely empty
-    const validMedicines = medicines.filter(
-      (med) =>
-        med.name.trim() ||
-        med.time.some((t) => t.trim()) ||
-        med.start_date.trim() ||
-        med.end_date.trim() ||
-        med.notes.trim()
-    )
+const saveChanges = async () => {
+  const validMedicines = medicines.filter(
+    (med) =>
+      med.name.trim() ||
+      med.time.some((t) => t.trim()) ||
+      med.start_date.trim() ||
+      med.end_date.trim() ||
+      med.notes.trim()
+  )
 
-    if (validMedicines.length === 0) {
-      toast({
-        title: "No medicines to save",
-        description: "Please add at least one medicine with details.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const response = await fetch("http://localhost:5001/api/save", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ medicines: validMedicines }),
-      })
-      if (!response.ok) throw new Error("Failed to save changes")
-      toast({
-        title: "Changes saved",
-        description: "Medicine list has been saved successfully.",
-      })
-    } catch {
-      toast({
-        title: "Save failed",
-        description: "Failed to save changes. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
-    }
+  if (validMedicines.length === 0) {
+    toast({
+      title: "No medicines to save",
+      description: "Please add at least one medicine with details.",
+      variant: "destructive",
+    })
+    return
   }
+
+  setIsSaving(true)
+  try {
+    const emaill = localStorage.getItem("userEmail") ?? ""  // get email from localStorage
+    const googleToken = localStorage.getItem("googleToken") ?? ""
+    const payload = {
+      email:emaill,
+      token: googleToken,
+      medicines: validMedicines.map(({ id: _id, ...rest }) => rest),// exclude id from sending
+    }
+    authorizeAndAddEvents(validMedicines);
+    const response = await fetch("http://10.50.49.41:5001/add_medicines", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) throw new Error("Failed to save changes")
+    toast({
+      title: "Changes saved",
+      description: "Medicine list has been saved successfully.",
+    })
+  } catch {
+    toast({
+      title: "Save failed",
+      description: "Failed to save changes. Please try again.",
+      variant: "destructive",
+    })
+  } finally {
+    setIsSaving(false)
+  }
+}
+
 
   const clearAll = () => {
     setMedicines([
@@ -313,3 +339,5 @@ export default function ManualPrescriptionPage() {
     </AuthGuard>
   )
 }
+
+
