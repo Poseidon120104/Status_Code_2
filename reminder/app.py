@@ -77,36 +77,7 @@ def schedule_all_reminders():
         )
 
         # If medicines list is empty, remove the user document
-        if not updated_medicines:
-            print(f"🗑 Removing user {user.get('email')} because medicines list is empty")
-            users_collection.delete_one({"_id": user["_id"]})
-            # Remove scheduled jobs for this user
-            if user_id in last_user_state:
-                for med in last_user_state[user_id]:
-                    med_name = med["name"]
-                    for t in med.get("time", []):
-                        job_id = f"{user_id}{med_name}{t}"
-                        try:
-                            scheduler.remove_job(job_id)
-                        except:
-                            pass
-                del last_user_state[user_id]
-            continue
-
-        # Skip if medicines have not changed
-        if user_id in last_user_state and last_user_state[user_id] == updated_medicines:
-            continue
-
-        # Remove previously scheduled jobs for this user
-        if user_id in last_user_state:
-            for med in last_user_state[user_id]:
-                med_name = med["name"]
-                for t in med.get("time", []):
-                    job_id = f"{user_id}{med_name}{t}"
-                    try:
-                        scheduler.remove_job(job_id)
-                    except:
-                        pass
+      
 
         # Schedule reminders for future medicine times
         for med in updated_medicines:
@@ -163,3 +134,4 @@ def reminders_status():
 
 if _name_ == "_main_":
     app.run(debug=True)
+
