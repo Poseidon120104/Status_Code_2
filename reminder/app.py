@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 # Twilio credentials
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -35,7 +35,7 @@ def medicine_reminder(to_number, name, notes, scheduled_time):
     try:
         message = client.messages.create(
             from_=TWILIO_WHATSAPP,
-            body=f"💊 Reminder: At {scheduled_time}, you need to take {name}.\nNotes: {notes}",
+            body=f"💊 Reminder: At {scheduled_time}, you need to take *{name}*.\nNotes: {notes}",
             to=to_number
         )
         print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Reminder sent for {name} to {to_number} (scheduled for {scheduled_time})")
@@ -77,7 +77,36 @@ def schedule_all_reminders():
         )
 
         # If medicines list is empty, remove the user document
-      
+        if not updated_medicines:
+            print(f"🗑 Removing user {user.get('email')} because medicines list is empty")
+            users_collection.delete_one({"_id": user["_id"]})
+            # Remove scheduled jobs for this user
+            if user_id in last_user_state:
+                for med in last_user_state[user_id]:
+                    med_name = med["name"]
+                    for t in med.get("time", []):
+                        job_id = f"{user_id}_{med_name}_{t}"
+                        try:
+                            scheduler.remove_job(job_id)
+                        except:
+                            pass
+                del last_user_state[user_id]
+            continue
+
+        # Skip if medicines have not changed
+        if user_id in last_user_state and last_user_state[user_id] == updated_medicines:
+            continue
+
+        # Remove previously scheduled jobs for this user
+        if user_id in last_user_state:
+            for med in last_user_state[user_id]:
+                med_name = med["name"]
+                for t in med.get("time", []):
+                    job_id = f"{user_id}_{med_name}_{t}"
+                    try:
+                        scheduler.remove_job(job_id)
+                    except:
+                        pass
 
         # Schedule reminders for future medicine times
         for med in updated_medicines:
@@ -97,7 +126,7 @@ def schedule_all_reminders():
                     if reminder_datetime < now:
                         continue
 
-                    job_id = f"{user_id}{med_name}{t}"
+                    job_id = f"{user_id}_{med_name}_{t}"
                     scheduler.add_job(
                         medicine_reminder,
                         "cron",
@@ -132,6 +161,5 @@ def reminders_status():
     return "Scheduler is active and sending reminders."
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True)
-
